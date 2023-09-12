@@ -1,0 +1,8 @@
+version: '3.4'
+
+services:
+  securitywebapp:
+    image: ${DOCKER_REGISTRY-}securitywebapp
+    build:
+      context: .
+      dockerfile: SecurityWebApp/Dockerfile

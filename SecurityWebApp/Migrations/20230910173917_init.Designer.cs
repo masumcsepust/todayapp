@@ -12,8 +12,8 @@ using SecurityWebApp.Data;
 namespace SecurityWebApp.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20230903194649_initial")]
-    partial class initial
+    [Migration("20230910173917_init")]
+    partial class init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
