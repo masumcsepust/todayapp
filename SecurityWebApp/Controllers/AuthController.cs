@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using Google.Apis.Auth;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -10,6 +11,8 @@ using SecurityWebApp.Dtos.Auth;
 using SecurityWebApp.Models;
 using SecurityWebApp.Services;
 using System;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
@@ -25,6 +28,7 @@ public class AuthController : ControllerBase
     private readonly SignInManager<User> _signInManager;
     private readonly IConfiguration _config;
     private readonly EmailService _emailService;
+    private readonly HttpClient _facebookHttpClient;
 
     public AuthController(JWTService jWTService
         , UserManager<User> userManager
@@ -37,6 +41,10 @@ public class AuthController : ControllerBase
         _signInManager = signInManager;
         _config = config;
         _emailService = emailService;
+        _facebookHttpClient = new HttpClient()
+        {
+            BaseAddress = new Uri("https://graph.facebook.com")
+        };
     }
 
     [HttpPost("login")]
@@ -52,6 +60,48 @@ public class AuthController : ControllerBase
         return CreateApplicationUserDto(user);
     }
 
+    [HttpPost("login-with-third-party")]
+    public async Task<ActionResult<UserDto>> LoginWithThirdParty([FromBody] LoginWithExternalDto model)
+    {
+        if (model.Provider.Equals(SD.Facebook))
+        {
+            try
+            {
+                if (!FacebookValidatedAsync(model.AccessToken, model.UserId).GetAwaiter().GetResult())
+                {
+                    return Unauthorized("login unauthorized");
+                }
+            }
+            catch (Exception ex)
+            {
+                return Unauthorized();
+            }
+        }
+        else if (model.Provider == SD.Google)
+        {
+            try
+            {
+                if (!GoogleValidateAsync(model.AccessToken, model.UserId).GetAwaiter().GetResult())
+                    return Unauthorized("Google login failed");
+            }
+            catch (Exception ex)
+            {
+                return Unauthorized(string.Format("Google login failed message: {0}", ex.Message));
+            }
+        }
+        else
+        {
+            return BadRequest("Invalid provider");
+        }
+
+        var user = await _userManager.Users.FirstOrDefaultAsync(x => 
+        x.UserName == model.UserId && x.Provider == model.Provider
+        );
+        if (user == null)
+            return BadRequest("Unable to find your account");
+
+        return CreateApplicationUserDto(user);
+    }
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDto model)
     {
@@ -82,6 +132,56 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("register-with-third-party")]
+    public async Task<ActionResult<UserDto>> RegisterWithThirdParty([FromBody] RegisterWithExternalDto model)
+    {
+        if(model.Provider.Equals(SD.Facebook))
+        {
+            try
+            {
+                if(!FacebookValidatedAsync(model.AccessToken, model.UserId).GetAwaiter().GetResult())
+                {
+                    return Unauthorized();
+                }
+            }
+            catch (Exception ex)
+            {
+                return Unauthorized();
+            }
+        } 
+        else if(model.Provider == SD.Google)
+        {
+            try
+            {
+                if(!GoogleValidateAsync(model.AccessToken, model.UserId).GetAwaiter().GetResult())
+                    return Unauthorized("Google registration failed");
+            }
+            catch(Exception ex)
+            {
+                return Unauthorized(string.Format("Google registration failed message: {0}", ex.Message));
+            }
+        }
+        else
+        {
+            return BadRequest("Invalid provider");
+        }
+
+        var user = await _userManager.FindByNameAsync(model.UserId);
+        if (user != null) 
+            return BadRequest(string.Format("You have an account already. please login with your {0}", model.Provider));
+
+        var userToAdd = new User
+        {
+            FirstName = model.FirstName.ToLower(),
+            LastName = model.LastName.ToLower(),
+            UserName = model.UserId,
+            Provider = model.Provider
+        };
+        var result = await _userManager.CreateAsync(userToAdd);
+
+        if (!result.Succeeded) return BadRequest(result.Errors);
+        return CreateApplicationUserDto(userToAdd);
+    }
     [Authorize]
     [HttpGet("refresh-user-token")]
     public async Task<ActionResult<UserDto>> RefreshUserToken()
@@ -233,5 +333,38 @@ public class AuthController : ControllerBase
         var emailSend = new EmailSendDto(user.Email, "forgot your username or password", body);
 
         return await _emailService.SendEmailAsync(emailSend);
+    }
+
+    private async Task<bool> FacebookValidatedAsync(string accessToken, string userId)
+    {
+        var facebook = $"{_config["Facebook:AppId"]}|{_config["Facebook:AppSecret"]}";
+        var fbResult = await _facebookHttpClient.GetFromJsonAsync<FacebookResultDto>($"debug_token?input_token={accessToken}&access_token={facebook}");
+        if(fbResult.Data.IsValid=false && fbResult is null && !fbResult.Data.UserId.Equals(userId))
+            return false;
+        return true;
+    }
+
+    private async Task<bool> GoogleValidateAsync(string accessToken, string userId)
+    {
+        var payload = await GoogleJsonWebSignature.ValidateAsync(accessToken);
+
+        if (!payload.Audience.Equals(_config["Google:ClientId"]))
+            return false;
+
+        if(!payload.Issuer.Equals("accounts.google.com") && !payload.Issuer.Equals("https://accounts.google.com"))
+            return false;
+
+        if (payload.ExpirationTimeSeconds == null)
+            return false;
+
+        DateTime now = DateTime.Now.ToUniversalTime();
+        DateTime expiration = DateTimeOffset.FromUnixTimeSeconds((long)payload.ExpirationTimeSeconds).DateTime;
+        if(now > expiration) 
+            return false;
+
+        if(!payload.Subject.Equals(userId))
+            return false;
+
+        return true;
     }
 }
