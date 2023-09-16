@@ -6,11 +6,15 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using SecurityWebApp.Data;
+using SecurityWebApp.Dtos;
 using SecurityWebApp.Models;
 using SecurityWebApp.Services;
+using System;
 using System.Linq;
+using System.Security.Claims;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,6 +27,7 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 builder.Services.AddScoped<JWTService>();
 builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<ContextSeedService>();
 
 builder.Services.AddIdentityCore<User>(options =>
 {
@@ -66,6 +71,18 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()
             .AllowAnyHeader());
 });
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("admin", rolePolicy => rolePolicy.RequireRole("admin"));
+    options.AddPolicy("manager", rolePolicy => rolePolicy.RequireRole("manager"));
+    options.AddPolicy("player", rolePolicy => rolePolicy.RequireRole("player"));
+    options.AddPolicy("admin-or-player", rolePolicy => rolePolicy.RequireRole("admin", "player"));
+    options.AddPolicy("admin-or-manager", rolePolicy => rolePolicy.RequireRole("admin", "manager"));
+
+    options.AddPolicy("admin-email-policy", claimPolicy => claimPolicy.RequireClaim(ClaimTypes.Email, "admin@gmail.com"));
+    options.AddPolicy("ullah-surname-policy", claimPolicy => claimPolicy.RequireClaim(ClaimTypes.Surname, "Ullah"));
+    options.AddPolicy("VIPPolicy", policy => policy.RequireAssertion(context => SD.VIPPolicy(context)));
+});
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
     options.InvalidModelStateResponseFactory = actionContext =>
@@ -101,5 +118,19 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+#region context seed
+using var scope = app.Services.CreateScope();
+try
+{
+    var contextSeedService = scope.ServiceProvider.GetRequiredService<ContextSeedService>();
+    await contextSeedService.InitializeContextAsync();
+}
+catch(Exception ex)
+{
+    var _logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    _logger.LogError(ex.Message, "Failed to initialize and seed the database");
+}
+#endregion
 
 app.Run();

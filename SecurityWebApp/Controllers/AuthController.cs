@@ -57,7 +57,7 @@ public class AuthController : ControllerBase
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
         if (!result.Succeeded) return Unauthorized("Invalid username or password.");
-        return CreateApplicationUserDto(user);
+        return await CreateApplicationUserDto(user);
     }
 
     [HttpPost("login-with-third-party")]
@@ -100,7 +100,7 @@ public class AuthController : ControllerBase
         if (user == null)
             return BadRequest("Unable to find your account");
 
-        return CreateApplicationUserDto(user);
+        return  await CreateApplicationUserDto(user);
     }
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterDto model)
@@ -180,14 +180,14 @@ public class AuthController : ControllerBase
         var result = await _userManager.CreateAsync(userToAdd);
 
         if (!result.Succeeded) return BadRequest(result.Errors);
-        return CreateApplicationUserDto(userToAdd);
+        return await CreateApplicationUserDto(userToAdd);
     }
     [Authorize]
     [HttpGet("refresh-user-token")]
     public async Task<ActionResult<UserDto>> RefreshUserToken()
     {
         var user = await _userManager.FindByNameAsync(User.FindFirst(ClaimTypes.Email)?.Value);
-        return CreateApplicationUserDto(user);
+        return await CreateApplicationUserDto(user);
     }
 
     [HttpPut("confirm-email")]
@@ -285,13 +285,13 @@ public class AuthController : ControllerBase
             return BadRequest("Invalid token. Please try again");
         }
     }
-    private UserDto CreateApplicationUserDto(User user)
+    private async Task<UserDto> CreateApplicationUserDto(User user)
     {
         return new UserDto
         {
             FirstName = user.FirstName,
             LastName = user.LastName,
-            JWT = _jWTService.CreateJWT(user)
+            JWT = await _jWTService.CreateJWT(user)
         };
     }
     
