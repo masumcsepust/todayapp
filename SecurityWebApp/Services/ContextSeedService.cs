@@ -43,8 +43,8 @@ public class ContextSeedService
             {
                 FirstName = "Admin",
                 LastName = "Billah",
-                UserName = "admin@gmail.com",
-                Email = "admin@gmail.com",
+                UserName = SD.AdminUserName,
+                Email = SD.AdminUserName,
                 EmailConfirmed = true,
             };
 
@@ -96,7 +96,7 @@ public class ContextSeedService
             {
                 FirstName = "vipPlayer",
                 LastName = "Vip",
-                UserName = "vipplayer@gmail.com@gmail.com",
+                UserName = "vipplayer@gmail.com",
                 Email = "vipplayer@gmail.com",
                 EmailConfirmed = true,
             };

@@ -56,6 +56,9 @@ public class AuthController : ControllerBase
         if (user.EmailConfirmed == false) return Unauthorized("please confirm your email.");
 
         var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
+
+        if (result.IsLockedOut) return Unauthorized(string.Format("your account has been locked. you should wait until {0} (UTC time) to be able to login", user.LockoutEnd));
+
         if (!result.Succeeded) return Unauthorized("Invalid username or password.");
         return await CreateApplicationUserDto(user);
     }

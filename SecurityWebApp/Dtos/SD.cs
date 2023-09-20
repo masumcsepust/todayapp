@@ -9,6 +9,7 @@ public static class SD
     public static string Admin { get; set; } = "admin";
     public static string Manager { get; set; } = "manager";
     public static string Player { get; set; } = "player";
+    public static string AdminUserName { get; set; } = "admin@gmail.com";
 
     public static bool VIPPolicy(AuthorizationHandlerContext context)
     {
