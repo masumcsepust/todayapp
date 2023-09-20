@@ -59,7 +59,21 @@ public class AuthController : ControllerBase
 
         if (result.IsLockedOut) return Unauthorized(string.Format("your account has been locked. you should wait until {0} (UTC time) to be able to login", user.LockoutEnd));
 
-        if (!result.Succeeded) return Unauthorized("Invalid username or password.");
+        if (!result.Succeeded)
+        {
+            if(!user.UserName.Equals(SD.AdminUserName))
+                await _userManager.AccessFailedAsync(user);
+            if(user.AccessFailedCount >= SD.MaximumLoginAttempts)
+            {
+                await _userManager.SetLockoutEndDateAsync(user, DateTime.UtcNow.AddDays(1));
+                return Unauthorized(string.Format("your account has been locked. you should wait until {0} (UTC time) to be able to login", user.LockoutEnd));
+            }
+            return Unauthorized("Invalid username or password.");
+        }
+
+        await _userManager.ResetAccessFailedCountAsync(user);
+        await _userManager.SetLockoutEndDateAsync(user, null);
+
         return await CreateApplicationUserDto(user);
     }
 
@@ -119,6 +133,7 @@ public class AuthController : ControllerBase
 
         var result = await _userManager.CreateAsync(userToAdd, model.Password);
         if (!result.Succeeded) return BadRequest(result.Errors);
+        await _userManager.AddToRoleAsync(userToAdd, SD.Player);
 
         try
         {
@@ -183,6 +198,8 @@ public class AuthController : ControllerBase
         var result = await _userManager.CreateAsync(userToAdd);
 
         if (!result.Succeeded) return BadRequest(result.Errors);
+        await _userManager.AddToRoleAsync(userToAdd, SD.Player);
+
         return await CreateApplicationUserDto(userToAdd);
     }
     [Authorize]

@@ -128,7 +128,37 @@ public class AdminController : ControllerBase
         }
         else
         {
+            if (!string.IsNullOrEmpty(model.Password))
+            {
+                if (model.Password.Length < 6)
+                {
+                    ModelState.AddModelError("errors", "Password must be at least 6 characters");
+                    return BadRequest(ModelState);
+                }
+            }
+
+                if(IsAdminUserId(model.Id))
+                {
+                    return BadRequest("Super does not allow to change.");
+                }
+
             user = await _userManager.FindByIdAsync(model.Id);
+            if (user == null) return NotFound();
+
+            user.FirstName = model.FirstName.ToLower();
+            user.LastName = model.LastName.ToLower();
+            user.UserName = model.UserName.ToLower();
+
+            if(!string.IsNullOrEmpty(model.Password))
+            {
+                await _userManager.RemovePasswordAsync(user);
+                await _userManager.AddPasswordAsync(user, model.Password);
+            }
+
+            if (string.IsNullOrEmpty(model.Id))
+                return Ok(new JsonResult(new { Title = "Member Created", Message = $"{model.UserName} has been created." }));
+            else
+                return Ok(new JsonResult(new { Title = "Member edited", Message = $"{model.UserName} has been updated." }));
         }
 
         var userRoles = await _userManager.GetRolesAsync(user);
@@ -145,7 +175,7 @@ public class AdminController : ControllerBase
             }
         }
 
-        return NoContent();
+        return Ok();
     }
     private bool IsAdminUserId(string userId)
     {

@@ -10,6 +10,8 @@ public static class SD
     public static string Manager { get; set; } = "manager";
     public static string Player { get; set; } = "player";
     public static string AdminUserName { get; set; } = "admin@gmail.com";
+    public static string SuperAdminChangeNotAllowed { get; set; } = "Super admin change is not allowed!";
+    public const int MaximumLoginAttempts = 3;
 
     public static bool VIPPolicy(AuthorizationHandlerContext context)
     {
