@@ -34,6 +34,7 @@ public class AdminController : ControllerBase
             .Select(member => new MemberViewDto
             {
                 Id = member.Id,
+                UserName = member.UserName,
                 FirstName = member.FirstName,
                 LastName = member.LastName,
                 DateCreated = member.DateCreated,
@@ -125,9 +126,11 @@ public class AdminController : ControllerBase
 
             var result = await _userManager.CreateAsync(user, model.Password);
             if(!result.Succeeded) return BadRequest(result.Errors);
-        }
-        else
+        } else
         {
+            user = await _userManager.FindByIdAsync(model.Id);
+        }
+        
             if (!string.IsNullOrEmpty(model.Password))
             {
                 if (model.Password.Length < 6)
@@ -137,15 +140,16 @@ public class AdminController : ControllerBase
                 }
             }
 
-                if(IsAdminUserId(model.Id))
-                {
-                    return BadRequest("Super does not allow to change.");
-                }
-
-            user = await _userManager.FindByIdAsync(model.Id);
+               
+            
             if (user == null) return NotFound();
+        if (IsAdminUserId(user.Id))
+        {
+            return BadRequest("Super does not allow to change.");
+        }
 
-            user.FirstName = model.FirstName.ToLower();
+
+        user.FirstName = model.FirstName.ToLower();
             user.LastName = model.LastName.ToLower();
             user.UserName = model.UserName.ToLower();
 
@@ -154,28 +158,24 @@ public class AdminController : ControllerBase
                 await _userManager.RemovePasswordAsync(user);
                 await _userManager.AddPasswordAsync(user, model.Password);
             }
+            var userRoles = await _userManager.GetRolesAsync(user);
+
+            // removing users existing role(s)
+            await _userManager.RemoveFromRolesAsync(user, userRoles);
+
+            foreach (var role in model.Roles.Split(",").ToArray())
+            {
+                var roleToAdd = await _roleManager.Roles.FirstOrDefaultAsync(r => r.Name == role);
+                if (roleToAdd != null)
+                {
+                    await _userManager.AddToRoleAsync(user, role);
+                }
+            }
 
             if (string.IsNullOrEmpty(model.Id))
                 return Ok(new JsonResult(new { Title = "Member Created", Message = $"{model.UserName} has been created." }));
             else
                 return Ok(new JsonResult(new { Title = "Member edited", Message = $"{model.UserName} has been updated." }));
-        }
-
-        var userRoles = await _userManager.GetRolesAsync(user);
-
-        // removing users existing role(s)
-        await _userManager.RemoveFromRolesAsync(user, userRoles);
-
-        foreach(var role in model.Roles.Split(",").ToArray())
-        {
-            var roleToAdd = await _roleManager.Roles.FirstOrDefaultAsync(r => r.Name == role);
-            if(roleToAdd != null)
-            {
-                await _userManager.AddToRoleAsync(user, role);
-            }
-        }
-
-        return Ok();
     }
     private bool IsAdminUserId(string userId)
     {
